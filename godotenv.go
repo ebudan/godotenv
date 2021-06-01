@@ -42,7 +42,7 @@ func Load(filenames ...string) (err error) {
 	filenames = filenamesOrDefault(filenames)
 
 	for _, filename := range filenames {
-		err = loadFile(filename, false)
+		err = loadFile(filename, false, true)
 		if err != nil {
 			return // return early on a spazout
 		}
@@ -65,7 +65,7 @@ func Overload(filenames ...string) (err error) {
 	filenames = filenamesOrDefault(filenames)
 
 	for _, filename := range filenames {
-		err = loadFile(filename, true)
+		err = loadFile(filename, true, true)
 		if err != nil {
 			return // return early on a spazout
 		}
@@ -73,14 +73,22 @@ func Overload(filenames ...string) (err error) {
 	return
 }
 
+func ReadNoExpand(filenames ...string) (envMap map[string]string, err error) {
+	return read(false, filenames...)
+}
+
 // Read all env (with same file loading semantics as Load) but return values as
 // a map rather than automatically writing values into env
 func Read(filenames ...string) (envMap map[string]string, err error) {
+	return read(true, filenames...)
+}
+
+func read(expand bool, filenames ...string) (envMap map[string]string, err error) {
 	filenames = filenamesOrDefault(filenames)
 	envMap = make(map[string]string)
 
 	for _, filename := range filenames {
-		individualEnvMap, individualErr := readFile(filename)
+		individualEnvMap, individualErr := readFile(filename, expand)
 
 		if individualErr != nil {
 			err = individualErr
@@ -96,7 +104,7 @@ func Read(filenames ...string) (envMap map[string]string, err error) {
 }
 
 // Parse reads an env file from io.Reader, returning a map of keys and values.
-func Parse(r io.Reader) (envMap map[string]string, err error) {
+func Parse(r io.Reader, expand bool) (envMap map[string]string, err error) {
 	envMap = make(map[string]string)
 
 	var lines []string
@@ -112,7 +120,7 @@ func Parse(r io.Reader) (envMap map[string]string, err error) {
 	for _, fullLine := range lines {
 		if !isIgnoredLine(fullLine) {
 			var key, value string
-			key, value, err = parseLine(fullLine, envMap)
+			key, value, err = parseLine(fullLine, envMap, expand)
 
 			if err != nil {
 				return
@@ -125,7 +133,7 @@ func Parse(r io.Reader) (envMap map[string]string, err error) {
 
 //Unmarshal reads an env file from a string, returning a map of keys and values.
 func Unmarshal(str string) (envMap map[string]string, err error) {
-	return Parse(strings.NewReader(str))
+	return Parse(strings.NewReader(str), true)
 }
 
 // Exec loads env vars from the specified filenames (empty map falls back to default)
@@ -177,8 +185,8 @@ func filenamesOrDefault(filenames []string) []string {
 	return filenames
 }
 
-func loadFile(filename string, overload bool) error {
-	envMap, err := readFile(filename)
+func loadFile(filename string, overload bool, expand bool) error {
+	envMap, err := readFile(filename, expand)
 	if err != nil {
 		return err
 	}
@@ -199,17 +207,17 @@ func loadFile(filename string, overload bool) error {
 	return nil
 }
 
-func readFile(filename string) (envMap map[string]string, err error) {
+func readFile(filename string, expand bool) (envMap map[string]string, err error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return
 	}
 	defer file.Close()
 
-	return Parse(file)
+	return Parse(file, expand)
 }
 
-func parseLine(line string, envMap map[string]string) (key string, value string, err error) {
+func parseLine(line string, envMap map[string]string, expand bool) (key string, value string, err error) {
 	if len(line) == 0 {
 		err = errors.New("zero length string")
 		return
@@ -262,11 +270,11 @@ func parseLine(line string, envMap map[string]string) (key string, value string,
 	key = re.ReplaceAllString(splitString[0], "$1")
 
 	// Parse the value
-	value = parseValue(splitString[1], envMap)
+	value = parseValue(splitString[1], envMap, expand)
 	return
 }
 
-func parseValue(value string, envMap map[string]string) string {
+func parseValue(value string, envMap map[string]string, expand bool) string {
 
 	// trim
 	value = strings.Trim(value, " ")
@@ -303,7 +311,7 @@ func parseValue(value string, envMap map[string]string) string {
 			value = e.ReplaceAllString(value, "$1")
 		}
 
-		if singleQuotes == nil {
+		if singleQuotes == nil && expand {
 			value = expandVariables(value, envMap)
 		}
 	}
