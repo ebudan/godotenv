@@ -1,4 +1,7 @@
-A fork of joho -> arsoba -> own godotenv, with the added feature of non-expanding reads.
+A fork of joho -> arsoba -> ...
+
+This implementation switches the internal logic to ordered maps: reading, applying, and writing retains order.  
+This becomes relevant when manipulating .env files programmatically and expecting to be able to refer previously set variables within a file.
 
 Original README follows.
 
