@@ -156,11 +156,23 @@ func (m *EnvMap) RemoveAt(at int) (string, int) {
 func (m *EnvMap) Emit(w io.Writer, linenos bool) {
 	var buf bytes.Buffer
 	form := formatIx(len(m.entries))
-	for ix, p := range m.entries {
-		if linenos {
-			buf.WriteString(fmt.Sprintf(form, ix))
-		}
-		buf.WriteString(p.Key + "=\"" + p.Val + "\"\n")
+	if linenos {
+		m.Export(w, func(ix int, k, v string) string {
+			return fmt.Sprintf("%s%s=\"%s\"\n", fmt.Sprintf(form, ix), k, v)
+		})
+	} else {
+		m.Export(w, func(ix int, k, v string) string {
+			return fmt.Sprintf("%s=\"%s\"\n", k, v)
+		})
+	}
+	w.Write(buf.Bytes())
+}
+
+// Export calls linefilter for each key-value pair in the set and writes the result to writer.
+func (m *EnvMap) Export(w io.Writer, linefilter func(i int, k, v string) string) {
+	var buf bytes.Buffer
+	for i, p := range m.entries {
+		buf.WriteString(linefilter(i, p.Key, p.Val))
 	}
 	w.Write(buf.Bytes())
 }
