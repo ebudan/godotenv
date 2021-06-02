@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-var noopPresets = make(map[string]string)
+var noopPresets = NewEnvMap()
 
 func parseAndCompare(t *testing.T, rawEnvLine string, expectedKey string, expectedValue string) {
 	key, value, _ := parseLine(rawEnvLine, noopPresets, true)
@@ -18,13 +18,16 @@ func parseAndCompare(t *testing.T, rawEnvLine string, expectedKey string, expect
 	}
 }
 
-func loadEnvAndCompareValues(t *testing.T, loader func(files ...string) error, envFileName string, expectedValues map[string]string, presets map[string]string) {
+func loadEnvAndCompareValues(t *testing.T, loader func(files ...string) error, envFileName string, expectedValues map[string]string, presets *EnvMap) {
 	// first up, clear the env
 	os.Clearenv()
 
-	for k, v := range presets {
+	presets.Iter(func(k, v string) {
 		os.Setenv(k, v)
-	}
+	})
+	// for ix := 0; ix >= 0; pair, ix = presets.GetAt(ix) {
+	// 	os.Setenv(pair.Key, pair.Val)
+	// }
 
 	err := loader(envFileName)
 	if err != nil {
@@ -87,12 +90,13 @@ func TestReadPlainEnv(t *testing.T) {
 		t.Error("Error reading file")
 	}
 
-	if len(envMap) != len(expectedValues) {
+	if envMap.Len() != len(expectedValues) {
 		t.Error("Didn't get the right size map back")
 	}
 
 	for key, value := range expectedValues {
-		if envMap[key] != value {
+		p, ok := envMap.Get(key)
+		if ok < 0 || p != value {
 			t.Error("Read got one of the keys wrong")
 		}
 	}
@@ -109,8 +113,9 @@ func TestParse(t *testing.T) {
 		t.Fatalf("error parsing env: %v", err)
 	}
 	for key, value := range expectedValues {
-		if envMap[key] != value {
-			t.Errorf("expected %s to be %s, got %s", key, value, envMap[key])
+		v, _ := envMap.Get(key)
+		if v != value {
+			t.Errorf("expected %s to be %s, got %s", key, value, v)
 		}
 	}
 }
@@ -119,10 +124,9 @@ func TestLoadDoesNotOverride(t *testing.T) {
 	envFileName := "fixtures/plain.env"
 
 	// ensure NO overload
-	presets := map[string]string{
-		"OPTION_A": "do_not_override",
-		"OPTION_B": "",
-	}
+	presets := NewEnvMap()
+	presets.Set("OPTION_A", "do_not_override")
+	presets.Set("OPTION_B", "")
 
 	expectedValues := map[string]string{
 		"OPTION_A": "do_not_override",
@@ -135,9 +139,8 @@ func TestOveroadDoesOverride(t *testing.T) {
 	envFileName := "fixtures/plain.env"
 
 	// ensure NO overload
-	presets := map[string]string{
-		"OPTION_A": "do_not_override",
-	}
+	presets := NewEnvMap()
+	presets.Set("OPTION_A", "do_not_override")
 
 	expectedValues := map[string]string{
 		"OPTION_A": "1",
@@ -197,9 +200,8 @@ func TestLoadQuotedEnv(t *testing.T) {
 func TestSubstitutions(t *testing.T) {
 	envFileName := "fixtures/substitutions.env"
 
-	presets := map[string]string{
-		"GLOBAL_OPTION": "global",
-	}
+	presets := NewEnvMap()
+	presets.Set("GLOBAL_OPTION", "global")
 
 	expectedValues := map[string]string{
 		"OPTION_A": "1",
@@ -268,8 +270,9 @@ func TestExpanding(t *testing.T) {
 				t.Errorf("Error: %s", err.Error())
 			}
 			for k, v := range tt.expected {
-				if strings.Compare(env[k], v) != 0 {
-					t.Errorf("Expected: %s, Actual: %s", v, env[k])
+				val, _ := env.Get(k)
+				if strings.Compare(val, v) != 0 {
+					t.Errorf("Expected: %s, Actual: %s", v, val)
 				}
 			}
 		})
@@ -433,7 +436,7 @@ func TestErrorParsing(t *testing.T) {
 func TestWrite(t *testing.T) {
 	writeAndCompare := func(env string, expected string) {
 		envMap, _ := Unmarshal(env)
-		actual, _ := Marshal(envMap)
+		actual := Marshal(envMap)
 		if expected != actual {
 			t.Errorf("Expected '%v' (%v) to write as '%v', got '%v' instead.", env, envMap, expected, actual)
 		}
@@ -450,8 +453,8 @@ func TestWrite(t *testing.T) {
 	// newlines, backslashes, and some other special chars are escaped
 	writeAndCompare(`foo="\n\r\\r!"`, `foo="\n\r\\r\!"`)
 	// lines should be sorted
-	writeAndCompare("foo=bar\nbaz=buzz", "baz=\"buzz\"\nfoo=\"bar\"")
-
+	//writeAndCompare("foo=bar\nbaz=buzz", "baz=\"buzz\"\nfoo=\"bar\"")
+	// ...no, they should not.
 }
 
 func TestRoundtrip(t *testing.T) {
@@ -462,10 +465,7 @@ func TestRoundtrip(t *testing.T) {
 		if err != nil {
 			t.Errorf("Expected '%s' to read without error (%v)", fixtureFilename, err)
 		}
-		rep, err := Marshal(env)
-		if err != nil {
-			t.Errorf("Expected '%s' to Marshal (%v)", fixtureFilename, err)
-		}
+		rep := Marshal(env)
 		roundtripped, err := Unmarshal(rep)
 		if err != nil {
 			t.Errorf("Expected '%s' to Mashal and Unmarshal (%v)", fixtureFilename, err)
