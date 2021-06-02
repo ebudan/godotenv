@@ -95,7 +95,10 @@ func read(expand bool, filenames ...string) (envMap *EnvMap, err error) {
 			err = individualErr
 			return // return early on a spazout
 		}
-		individualEnvMap.Iter(func(k, v string) { envMap.Set(k, v) })
+		individualEnvMap.Iter(func(k, v string) {
+			envMap.Set(k, v)
+			os.Setenv(k, v) // readFile() and descendats will only respect ENV to fill in vars!
+		})
 	}
 
 	return
