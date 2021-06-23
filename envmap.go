@@ -154,7 +154,6 @@ func (m *EnvMap) RemoveAt(at int) (string, int) {
 
 // Emits the contents of the map to the writer, optionally with line numbers.
 func (m *EnvMap) Emit(w io.Writer, linenos bool) {
-	var buf bytes.Buffer
 	form := formatIx(len(m.entries))
 	if linenos {
 		m.Export(w, func(ix int, k, v string) string {
@@ -165,7 +164,6 @@ func (m *EnvMap) Emit(w io.Writer, linenos bool) {
 			return fmt.Sprintf("%s=\"%s\"\n", k, v)
 		})
 	}
-	w.Write(buf.Bytes())
 }
 
 // Export calls linefilter for each key-value pair in the set and writes the result to writer.
